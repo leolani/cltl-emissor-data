@@ -9,12 +9,12 @@ with open("VERSION", "r") as fh:
 
 
 setup(
-    name='cltl.template',
+    name='cltl.emissor-data',
     version=version,
     package_dir={'': 'src'},
     packages=find_namespace_packages(include=['cltl.*', 'cltl_service.*'], where='src'),
     data_files=[('VERSION', ['VERSION'])],
-    url="https://github.com/leolani/cltl-template",
+    url="https://github.com/leolani/cltl-emissor-data",
     license='MIT License',
     author='CLTL',
     author_email='t.baier@vu.nl',
@@ -25,10 +25,9 @@ setup(
     install_requires=['cltl.combot'],
     extras_require={
         "impl": [
-            "numpy"
+            "emissor"
         ],
         "service": [
-            "emissor",
             "flask"
         ]}
 )
