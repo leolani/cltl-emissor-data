@@ -58,9 +58,13 @@ class EmissorDataService:
 
         self._app = Flask("emissordata")
 
-        @self._app.route(f"/emissor/<paramter>", methods=['GET'])
-        def store_audio(parameter: str):
-            return Response(status=404)
+        @self._app.route(f"/<element_id>/scenario/id", methods=['GET'])
+        def get_scenario_id(element_id: str):
+            return self._storage.get_scenario_for_id(element_id)
+
+        @self._app.route(f"/scenario/current/id", methods=['GET'])
+        def get_current_scenario():
+            return self._storage.get_current_scenario_id()
 
         @self._app.after_request
         def set_cache_control(response):

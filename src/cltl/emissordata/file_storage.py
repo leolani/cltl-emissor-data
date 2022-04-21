@@ -2,8 +2,8 @@ import logging
 from typing import Iterable
 
 from emissor.persistence import ScenarioStorage
-from emissor.representation.scenario import Mention, Signal, Scenario
 from emissor.representation.container import Container
+from emissor.representation.scenario import Mention, Signal, Scenario
 
 from cltl.emissordata.api import EmissorDataStorage
 
@@ -71,6 +71,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
             raise ValueError(f"Container {container_id} not found for scenario {self._controller.scenario.id if self._controller else None}")
 
         self._signals[signal_id].mentions.append(mention)
+        self._signal_idx[mention.id] = signal_id
 
         for annotation in mention.annotations:
             if isinstance(annotation, Container):
@@ -82,3 +83,18 @@ class EmissorDataFileStorage(EmissorDataStorage):
         for key, value in vars(update_obj).items():
             if hasattr(obj, key) and value:
                 setattr(obj, key, value)
+
+    def get_signal(self, signal_id: str) -> Signal:
+        return self._signals[signal_id]
+
+    def get_current_scenario_id(self) -> str:
+        return self._controller.scenario.id if self._controller else None
+
+    def get_scenario_for_id(self, element_id: str) -> str:
+        if element_id in self._signals:
+            signal = self._signals[element_id]
+        else:
+            signal_id = self._signal_idx[element_id]
+            signal = self._signals[signal_id]
+
+        return signal.time.container_id

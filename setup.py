@@ -29,5 +29,9 @@ setup(
         ],
         "service": [
             "flask"
-        ]}
+        ],
+        "client": [
+            "requests"
+        ]
+    }
 )

@@ -19,3 +19,12 @@ class EmissorDataStorage(abc.ABC):
 
     def add_mentions(self, mentions: Iterable[Mention]):
         raise NotImplementedError()
+
+    def get_signal(self, signal_id: str) -> Signal:
+        raise NotImplementedError()
+
+    def get_scenario_for_id(self, element_id: str) -> str:
+        raise NotImplementedError()
+
+    def get_current_scenario_id(self) -> str:
+        raise NotImplementedError()
