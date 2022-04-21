@@ -1,5 +1,4 @@
 import logging
-import uuid
 from typing import List
 
 from cltl.combot.event.emissor import ScenarioStarted, ScenarioStopped, SignalEvent, AnnotationEvent
@@ -7,12 +6,9 @@ from cltl.combot.infra.config import ConfigurationManager
 from cltl.combot.infra.event import Event, EventBus
 from cltl.combot.infra.resource import ResourceManager
 from cltl.combot.infra.topic_worker import TopicWorker
-from cltl.combot.infra.time_util import timestamp_now
 from flask import Flask, Response
 
 from cltl.emissordata.api import EmissorDataStorage
-
-from emissor.representation.scenario import Scenario, Modality
 
 logger = logging.getLogger(__name__)
 
@@ -21,7 +17,7 @@ class EmissorDataService:
     @classmethod
     def from_config(cls, storage: EmissorDataStorage, event_bus: EventBus, resource_manager: ResourceManager,
                     config_manager: ConfigurationManager):
-        config = config_manager.get_config("cltl.emissordata")
+        config = config_manager.get_config("cltl.emissor-data.event")
 
         return cls(config.get("topics", multi=True), storage, event_bus, resource_manager)
 
@@ -40,7 +36,8 @@ class EmissorDataService:
     def start(self, timeout=30):
         self._topic_worker = TopicWorker(self._input_topics, self._event_bus,
                                          resource_manager=self._resource_manager,
-                                         processor=self._process)
+                                         processor=self._process,
+                                         name=self.__class__.__name__)
         self._topic_worker.start().wait()
 
     def stop(self):
@@ -78,9 +75,13 @@ class EmissorDataService:
     def _process(self, event: Event):
         if event.payload.type == ScenarioStarted.__name__:
             self._storage.start_scenario(event.payload.scenario)
+            logger.debug("Received scenario started event for scenario %s", event.payload.scenario.id)
         if event.payload.type == ScenarioStopped.__name__:
             self._storage.stop_scenario(event.payload.scenario)
-        if event.payload.type == SignalEvent.__name__:
+            logger.debug("Received scenario stopped event for scenario %s", event.payload.scenario.id)
+        if hasattr(event.payload, 'signal'):
             self._storage.add_signal(event.payload.signal)
-        if event.payload.type == AnnotationEvent.__name__:
+            logger.debug("Received signal event %s", event.payload.signal.id)
+        if hasattr(event.payload, 'mentions'):
             self._storage.add_mentions(event.payload.mentions)
+            logger.debug("Received mentions event %s" + event.payload.type)

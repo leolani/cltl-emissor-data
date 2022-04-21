@@ -38,10 +38,10 @@ class EmissorDataFileStorage(EmissorDataStorage):
 
     def add_signal(self, signal: Signal):
         if not self._controller:
-            raise ValueError(f"Scenario {signal.ruler.container_id} is not the current scenario (None)")
+            raise ValueError(f"Scenario {signal.ruler.container_id} is not the current scenario (None) for signal {signal}")
 
         if self._controller.scenario.id != signal.time.container_id:
-            raise ValueError(f"Scenario {signal.ruler.container_id} is not the current scenario ({self._controller.scenario.id if self._controller else None})")
+            raise ValueError(f"Scenario {signal.ruler.container_id} is not the current scenario ({self._controller.scenario.id if self._controller else None}) for signal {signal}")
 
         if signal.id in self._signals:
             self._update(self._signals[signal.id], signal)
