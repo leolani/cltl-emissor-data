@@ -1,12 +1,26 @@
-import os
+import dataclasses
 import unittest
 from tempfile import TemporaryDirectory
+
+import numpy as np
+import numpy.testing
 
 from emissor.persistence import ScenarioStorage
 from emissor.representation.annotation import Token
 from emissor.representation.scenario import Scenario, ImageSignal, Modality, AudioSignal, Mention, Annotation
 
 from cltl.emissordata.file_storage import EmissorDataFileStorage
+
+
+@dataclasses.dataclass
+class Face:
+    """
+    Information about a Face.
+
+    Includes a vector representation of the face and optional meta information.
+    """
+    embedding: np.ndarray
+
 
 
 class TestEmissorDataFileStorage(unittest.TestCase):
@@ -18,7 +32,6 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         self.path.cleanup()
 
     def test_scenario_start(self):
-        os.makedirs(self.path.name + "/sc_1")
         scenario_start = Scenario.new_instance("sc_1", 0, None, "", {"image": "./image"})
 
         self.emissor_storage.start_scenario(scenario_start)
@@ -32,8 +45,6 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         self.assertEqual({"image": "./image"}, actual.scenario.signals)
 
     def test_scenario_stop(self):
-        os.makedirs(self.path.name + "/sc_1")
-
         scenario_start = Scenario.new_instance("sc_1", 0, None, "", {"image": "./image"})
         self.emissor_storage.start_scenario(scenario_start)
         scenario_stop = Scenario.new_instance("sc_1", 0, 1, "", {"image": "./image"})
@@ -48,8 +59,6 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         self.assertEqual({"image": "./image"}, actual.scenario.signals)
 
     def test_signal_start(self):
-        os.makedirs(self.path.name + "/sc_1")
-
         scenario = Scenario.new_instance("sc_1", 0, None, "", {"audio": "./audio"})
         self.emissor_storage.start_scenario(scenario)
 
@@ -67,8 +76,6 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         self.assertEqual((0, 0, -1, 2), actual_signals[0].ruler.bounds)
 
     def test_signal_stop(self):
-        os.makedirs(self.path.name + "/sc_1")
-
         scenario = Scenario.new_instance("sc_1", 0, None, "", {"audio": "./audio"})
         self.emissor_storage.start_scenario(scenario)
         start_signal = AudioSignal.for_scenario("sc_1", 0, None, "", -1, 2)
@@ -88,8 +95,6 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         self.assertEqual((0, 0, 1, 2), actual_signals[0].ruler.bounds)
 
     def test_multiple_signals(self):
-        os.makedirs(self.path.name + "/sc_1")
-
         scenario = Scenario.new_instance("sc_1", 0, None, "", {"audio": "./audio"})
         self.emissor_storage.start_scenario(scenario)
 
@@ -111,8 +116,6 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         self.assertEqual((0, 0, 1, 2), actual_signals[1].ruler.bounds)
 
     def test_add_mention(self):
-        os.makedirs(self.path.name + "/sc_1")
-
         scenario = Scenario.new_instance("sc_1", 0, None, "", {"audio": "./audio"})
         self.emissor_storage.start_scenario(scenario)
         audio_signal_1 = AudioSignal.for_scenario("sc_1", 0, 1, "", 1, 2)
@@ -129,8 +132,6 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         self.assertEqual("men_1", actual_signals[0].mentions[0].id)
 
     def test_add_mention_on_annotation(self):
-        os.makedirs(self.path.name + "/sc_1")
-
         scenario = Scenario.new_instance("sc_1", 0, None, "", {"audio": "./audio"})
         self.emissor_storage.start_scenario(scenario)
         audio_signal_1 = AudioSignal.for_scenario("sc_1", 0, 1, "", 1, 2)
@@ -150,3 +151,23 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         self.assertEqual(2, len(actual_signals[0].mentions))
         self.assertEqual("men_1", actual_signals[0].mentions[0].id)
         self.assertEqual("men_2", actual_signals[0].mentions[1].id)
+
+    def test_add_mention_with_numpy_array(self):
+        scenario = Scenario.new_instance("sc_1", 0, None, "", {"image": "./image"})
+        self.emissor_storage.start_scenario(scenario)
+        image_signal = ImageSignal.for_scenario("sc_1", 0, 1, "", (0, 0, 1, 1))
+        self.emissor_storage.add_signal(image_signal)
+
+        array = np.random.random((10, 10))
+        mention = Mention("men_1", [image_signal.ruler.get_area_bounding_box(0, 0, 1, 1)],
+                          [Annotation("test_annotation", Face(array), 1.0, 0)])
+        self.emissor_storage.add_mention(mention)
+
+        actual_signals = ScenarioStorage(self.path.name).load_modality("sc_1", Modality.IMAGE)
+        self.assertEqual(1, len(actual_signals))
+        self.assertEqual(image_signal.id, actual_signals[0].id)
+        self.assertEqual(1, len(actual_signals[0].mentions))
+        self.assertEqual("men_1", actual_signals[0].mentions[0].id)
+        # TODO empty dimension added
+        numpy.testing.assert_array_equal(array,
+                                         np.squeeze(actual_signals[0].mentions[0].annotations[0].value))
