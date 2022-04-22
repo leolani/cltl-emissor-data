@@ -5,7 +5,7 @@ from cltl.combot.event.emissor import ScenarioStarted, ScenarioStopped, SignalEv
 from cltl.combot.infra.config import ConfigurationManager
 from cltl.combot.infra.event import Event, EventBus
 from cltl.combot.infra.resource import ResourceManager
-from cltl.combot.infra.topic_worker import TopicWorker
+from cltl.combot.infra.topic_worker import TopicWorker, RejectionStrategy
 from flask import Flask, Response
 
 from cltl.emissordata.api import EmissorDataStorage
@@ -35,6 +35,7 @@ class EmissorDataService:
 
     def start(self, timeout=30):
         self._topic_worker = TopicWorker(self._input_topics, self._event_bus,
+                                         buffer_size=2048, rejection_strategy=RejectionStrategy.EXCEPTION,
                                          resource_manager=self._resource_manager,
                                          processor=self._process,
                                          name=self.__class__.__name__)
@@ -85,7 +86,7 @@ class EmissorDataService:
             logger.debug("Received scenario stopped event for scenario %s", event.payload.scenario.id)
         if hasattr(event.payload, 'signal'):
             self._storage.add_signal(event.payload.signal)
-            logger.debug("Received signal event %s", event.payload.signal.id)
+            logger.debug("Received signal event %s on topic %s", event.payload.signal.id, event.metadata.topic)
         if hasattr(event.payload, 'mentions'):
             self._storage.add_mentions(event.payload.mentions)
-            logger.debug("Received mentions event %s" + event.payload.type)
+            logger.debug("Received mentions event %s on topic %s", event.payload.type, event.metadata.topic)
