@@ -38,7 +38,8 @@ class EmissorDataFileStorage(EmissorDataStorage):
 
     def add_signal(self, signal: Signal):
         if not self._controller:
-            raise ValueError(f"Scenario {signal.ruler.container_id} is not the current scenario (None) for signal {signal}")
+            logger.warning(f"Skipping signal for stopped Scenario {signal.ruler.container_id}")
+            return
 
         if self._controller.scenario.id != signal.time.container_id:
             raise ValueError(f"Scenario {signal.ruler.container_id} is not the current scenario ({self._controller.scenario.id if self._controller else None}) for signal {signal}")
@@ -52,10 +53,18 @@ class EmissorDataFileStorage(EmissorDataStorage):
         self._storage.save_scenario(self._controller)
 
     def add_mention(self, mention: Mention):
+        if not self._controller:
+            logger.warning("Skipping mention %s for stopped Scenario", mention)
+            return
+
         self._add_mention(mention)
         self._storage.save_scenario(self._controller)
 
     def add_mentions(self, mentions: Iterable[Mention]):
+        if not self._controller:
+            logger.warning("Skipping mention %s for stopped Scenario", mentions)
+            return
+
         for mention in mentions:
             self._add_mention(mention)
 
