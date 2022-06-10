@@ -8,6 +8,9 @@ class EmissorDataStorage(abc.ABC):
     def start_scenario(self, scenario: Scenario) -> str:
         raise NotImplementedError()
 
+    def update_scenario(self, scenario: Scenario) -> str:
+        raise NotImplementedError()
+
     def stop_scenario(self, scenario: Scenario) -> str:
         raise NotImplementedError()
 

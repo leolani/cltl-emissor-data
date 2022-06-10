@@ -1,7 +1,7 @@
 import logging
 from typing import List
 
-from cltl.combot.event.emissor import ScenarioStarted, ScenarioStopped, SignalEvent, AnnotationEvent
+from cltl.combot.event.emissor import ScenarioStarted, ScenarioStopped, SignalEvent, AnnotationEvent, ScenarioEvent
 from cltl.combot.infra.config import ConfigurationManager
 from cltl.combot.infra.event import Event, EventBus
 from cltl.combot.infra.resource import ResourceManager
@@ -81,12 +81,15 @@ class EmissorDataService:
         if event.payload.type == ScenarioStarted.__name__:
             self._storage.start_scenario(event.payload.scenario)
             logger.debug("Received scenario started event for scenario %s", event.payload.scenario.id)
-        if event.payload.type == ScenarioStopped.__name__:
+        elif event.payload.type == ScenarioStopped.__name__:
             self._storage.stop_scenario(event.payload.scenario)
             logger.debug("Received scenario stopped event for scenario %s", event.payload.scenario.id)
-        if hasattr(event.payload, 'signal'):
+        elif event.payload.type == ScenarioEvent.__name__:
+            self._storage.update_scenario(event.payload.scenario)
+            logger.debug("Received scenario event for scenario %s", event.payload.scenario.id)
+        elif hasattr(event.payload, 'signal'):
             self._storage.add_signal(event.payload.signal)
             logger.debug("Received signal event %s on topic %s", event.payload.signal.id, event.metadata.topic)
-        if hasattr(event.payload, 'mentions'):
+        elif hasattr(event.payload, 'mentions'):
             self._storage.add_mentions(event.payload.mentions)
             logger.debug("Received mentions event %s on topic %s", event.payload.type, event.metadata.topic)

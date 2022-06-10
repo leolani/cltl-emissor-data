@@ -21,9 +21,17 @@ class EmissorDataFileStorage(EmissorDataStorage):
         if self._controller is not None:
             raise ValueError(f"Scenarion {self._controller.scenario.id} is already started, tried to start {scenario.id}")
 
-        signals = scenario.signals if scenario.signals else []
         self._controller = self._storage.create_scenario(scenario.id, scenario.start,
-                                                         scenario.end, scenario.context, signals)
+                                                         scenario.end, scenario.context, scenario.signals)
+
+    def update_scenario(self, scenario: Scenario):
+        if self._controller.scenario.id != scenario.id:
+            raise ValueError(f"Scenario {scenario.id} is not started, current scenario is "
+                             f"{self._controller.scenario.id if self._controller else None}")
+
+        self._controller.scenario.context = scenario.context
+
+        self._storage.save_scenario(self._controller)
 
     def stop_scenario(self, scenario: Scenario):
         if self._controller.scenario.id != scenario.id:
