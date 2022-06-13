@@ -1,9 +1,12 @@
 import logging
+import os
+import shutil
 from typing import Iterable
 
 from emissor.persistence import ScenarioStorage
+from emissor.representation.util import marshal, unmarshal
 from emissor.representation.container import Container
-from emissor.representation.scenario import Mention, Signal, Scenario
+from emissor.representation.scenario import Mention, Signal, Scenario, Modality
 
 from cltl.emissordata.api import EmissorDataStorage
 
@@ -45,12 +48,38 @@ class EmissorDataFileStorage(EmissorDataStorage):
         self._signals = dict()
 
     def add_signal(self, signal: Signal):
+        try:
+            signal = unmarshal(marshal(signal, cls=signal.__class__), cls=signal.__class__)
+        except Exception as e:
+            logger.exception("Serialization failed for %s", signal)
+            raise e
+
         if not self._controller:
             logger.warning(f"Skipping signal for stopped Scenario {signal.ruler.container_id}")
             return
 
         if self._controller.scenario.id != signal.time.container_id:
             raise ValueError(f"Scenario {signal.ruler.container_id} is not the current scenario ({self._controller.scenario.id if self._controller else None}) for signal {signal}")
+
+        try:
+            if signal.time.end and signal.modality != Modality.TEXT:
+                # TODO copy independent of file system, i.e. read and write data
+                postfix = ""
+                if signal.modality == Modality.AUDIO:
+                    postfix = ".wav"
+                elif signal.modality == Modality.IMAGE:
+                    postfix = ".png"
+
+                signal.files = [f"{file.replace('cltl-storage:', '')}{postfix}" for file in signal.files]
+                for file in signal.files:
+                    src_path = os.path.normpath(os.path.join("storage", file))
+                    dest_path = os.path.normpath(os.path.join(self._storage.base_path, self._controller.scenario.id, file))
+                    dest_path = str(dest_path).replace("video", "image")
+                    logger.info("Copy signal data from %s to %s", src_path, dest_path)
+                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+                    shutil.copy2(src_path, dest_path)
+        except:
+            logger.exception("Copying signal failed")
 
         if signal.id in self._signals:
             self._update(self._signals[signal.id], signal)
