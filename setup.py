@@ -25,7 +25,9 @@ setup(
     install_requires=['cltl.combot'],
     extras_require={
         "impl": [
-            "emissor"
+            "emissor",
+            "soundfile",
+            "opencv-python"
         ],
         "service": [
             "flask"

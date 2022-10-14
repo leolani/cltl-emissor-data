@@ -1,12 +1,12 @@
 import logging
 from typing import List
 
-from cltl.combot.event.emissor import ScenarioStarted, ScenarioStopped, SignalEvent, AnnotationEvent, ScenarioEvent
+from cltl.combot.event.emissor import ScenarioStarted, ScenarioStopped, ScenarioEvent
 from cltl.combot.infra.config import ConfigurationManager
 from cltl.combot.infra.event import Event, EventBus
 from cltl.combot.infra.resource import ResourceManager
 from cltl.combot.infra.topic_worker import TopicWorker, RejectionStrategy
-from flask import Flask, Response
+from flask import Flask
 
 from cltl.emissordata.api import EmissorDataStorage
 

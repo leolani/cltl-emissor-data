@@ -1,12 +1,18 @@
 import logging
 import os
-import shutil
-from typing import Iterable
+from typing import Iterable, Callable
 
+import cv2
+import numpy as np
+import soundfile as sf
+from cltl.backend.source.client_source import ClientAudioSource, ClientImageSource
+from cltl.backend.spi.audio import AudioSource
+from cltl.backend.spi.image import ImageSource
+from cltl.combot.infra.config import ConfigurationManager
 from emissor.persistence import ScenarioStorage
+from emissor.representation.container import Container, MultiIndex
+from emissor.representation.scenario import Mention, Signal, Scenario, Modality, AudioSignal, ImageSignal
 from emissor.representation.util import marshal, unmarshal
-from emissor.representation.container import Container
-from emissor.representation.scenario import Mention, Signal, Scenario, Modality
 
 from cltl.emissordata.api import EmissorDataStorage
 
@@ -14,8 +20,25 @@ logger = logging.getLogger(__name__)
 
 
 class EmissorDataFileStorage(EmissorDataStorage):
-    def __init__(self, path: str):
+    @classmethod
+    def from_config(cls, config_manager: ConfigurationManager):
+        config = config_manager.get_config("cltl.emissor-data")
+
+        def audio_loader(url, offset, length) -> AudioSource:
+            return ClientAudioSource.from_config(config_manager, url, offset, length)
+
+        def image_loader(url) -> ImageSource:
+            return ClientImageSource.from_config(config_manager, url)
+
+        return cls(config.get("path"), audio_loader, image_loader)
+
+    def __init__(self, path: str,
+                 audio_loader: Callable[[str, int, int], AudioSource],
+                 image_loader: Callable[[str], ImageSource]):
         self._storage = ScenarioStorage(path)
+        self._audio_loader = audio_loader
+        self._image_loader = image_loader
+
         self._controller = None
         self._signals = dict()
         self._signal_idx = dict()
@@ -28,7 +51,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
                                                          scenario.end, scenario.context, scenario.signals)
 
     def update_scenario(self, scenario: Scenario):
-        if self._controller.scenario.id != scenario.id:
+        if (not self._controller) or (self._controller.scenario.id != scenario.id):
             raise ValueError(f"Scenario {scenario.id} is not started, current scenario is "
                              f"{self._controller.scenario.id if self._controller else None}")
 
@@ -37,7 +60,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
         self._storage.save_scenario(self._controller)
 
     def stop_scenario(self, scenario: Scenario):
-        if self._controller.scenario.id != scenario.id:
+        if (not self._controller) or (self._controller.scenario.id != scenario.id):
             raise ValueError(f"Scenario {scenario.id} is not started, current scenario is "
                              f"{self._controller.scenario.id if self._controller else None}")
 
@@ -61,25 +84,15 @@ class EmissorDataFileStorage(EmissorDataStorage):
         if self._controller.scenario.id != signal.time.container_id:
             raise ValueError(f"Scenario {signal.ruler.container_id} is not the current scenario ({self._controller.scenario.id if self._controller else None}) for signal {signal}")
 
-        try:
-            if signal.time.end and signal.modality != Modality.TEXT:
-                # TODO copy independent of file system, i.e. read and write data
-                postfix = ""
-                if signal.modality == Modality.AUDIO:
-                    postfix = ".wav"
-                elif signal.modality == Modality.IMAGE:
-                    postfix = ".png"
-
-                signal.files = [f"{file.replace('cltl-storage:', '')}{postfix}" for file in signal.files]
-                for file in signal.files:
-                    src_path = os.path.normpath(os.path.join("storage", file))
-                    dest_path = os.path.normpath(os.path.join(self._storage.base_path, self._controller.scenario.id, file))
-                    dest_path = str(dest_path).replace("video", "image")
-                    logger.info("Copy signal data from %s to %s", src_path, dest_path)
-                    os.makedirs(os.path.dirname(dest_path), exist_ok=True)
-                    shutil.copy2(src_path, dest_path)
-        except:
-            logger.exception("Copying signal failed")
+        if signal.time.end:
+            if signal.modality == Modality.TEXT:
+                pass
+            elif signal.modality == Modality.AUDIO:
+                self._store_audio_files(signal)
+            elif signal.modality == Modality.IMAGE:
+                self._store_image_files(signal)
+            else:
+                logger.error("Skip signal %s with Unsupported modality %s", signal.id, signal.modality)
 
         if signal.id in self._signals:
             self._update(self._signals[signal.id], signal)
@@ -88,6 +101,48 @@ class EmissorDataFileStorage(EmissorDataStorage):
             self._signals[signal.id] = signal
 
         self._storage.save_scenario(self._controller)
+
+    def _store_audio_files(self, audio_signal: AudioSignal):
+        for url in audio_signal.files:
+            dest_path = self._destination_path(url, "wav")
+            try:
+                self._store_audio(url, dest_path, audio_signal.ruler)
+                logger.info("Copy signal data from %s to %s", url, dest_path)
+            except:
+                logger.exception("Failed to store %s for audio signal %s", audio_signal.id, url)
+
+    def _store_audio(self, url: str, destination: str, segment: MultiIndex):
+        start, end = segment.bounds[0], segment.bounds[2]
+        with self._audio_loader(url, start, end - start) as source:
+            audio = np.concatenate(tuple(source.audio))
+
+        if not audio.dtype == np.int16:
+            raise ValueError(f"Wrong sample depth: {audio.dtype}")
+
+        sf.write(str(destination), audio, source.rate)
+
+    def _store_image_files(self, image_signal: ImageSignal):
+        for url in image_signal.files:
+            dest_path = self._destination_path(url, "png")
+            try:
+                self._store_image(url, dest_path)
+                logger.info("Copy signal data from %s to %s", url, dest_path)
+            except:
+                logger.exception("Failed to store %s for audio signal %s", image_signal.id, url)
+
+    def _store_image(self, url: str, destination: str):
+        with self._image_loader(url) as source:
+            image = source.capture()
+
+        cv2.imwrite(destination, cv2.cvtColor(image.image, cv2.COLOR_RGB2BGR))
+
+    def _destination_path(self, url, postfix):
+        file_name = f"{url.replace('cltl-storage:', '')}.{postfix}"
+        dest_path = os.path.join(self._storage.base_path, self._controller.scenario.id, file_name)
+
+        os.makedirs(os.path.dirname(dest_path), exist_ok=True)
+
+        return os.path.normpath(dest_path)
 
     def add_mention(self, mention: Mention):
         if not self._controller:
