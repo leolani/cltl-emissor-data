@@ -99,6 +99,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
         else:
             self._controller.append_signal(signal)
             self._signals[signal.id] = signal
+            logger.debug("Added signal id to emissor file storage: %s", signal.id)
 
         self._storage.save_scenario(self._controller)
 
@@ -173,12 +174,15 @@ class EmissorDataFileStorage(EmissorDataStorage):
 
         self._signals[signal_id].mentions.append(mention)
         self._signal_idx[mention.id] = signal_id
+        logger.debug("Added mention id to emissor file storage: %s", mention.id)
 
         for annotation in mention.annotations:
             if isinstance(annotation, Container):
                 self._signal_idx[annotation.id] = signal_id
+                logger.debug("Added annotation id to emissor file storage: %s", annotation.id)
             elif isinstance(annotation.value, Container):
                 self._signal_idx[annotation.value.id] = signal_id
+                logger.debug("Added container id to emissor file storage: %s", annotation.value.id)
 
     def _update(self, obj, update_obj):
         for key, value in vars(update_obj).items():

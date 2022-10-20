@@ -61,7 +61,10 @@ class EmissorDataService:
 
         @self._app.route(f"/<element_id>/scenario/id", methods=['GET'])
         def get_scenario_id(element_id: str):
-            return self._storage.get_scenario_for_id(element_id)
+            try:
+                return self._storage.get_scenario_for_id(element_id), 200
+            except KeyError:
+                return self._storage.get_current_scenario_id(), 404
 
         @self._app.route(f"/scenario/current/id", methods=['GET'])
         def get_current_scenario():
