@@ -1,6 +1,8 @@
+import glob
 import logging
 import os
-from concurrent.futures import ThreadPoolExecutor, wait
+import shutil
+from datetime import datetime
 from typing import Iterable, Callable
 
 import cv2
@@ -72,8 +74,33 @@ class EmissorDataFileStorage(EmissorDataStorage):
         self._is_modified = True
         self.flush()
 
+        self._copy_rdf()
+
         self._controller = None
         self._signals = dict()
+
+    def _copy_rdf(self):
+        start_date = self._to_datetime(self._controller.scenario.ruler.start)
+        stop_date = self._to_datetime(self._controller.scenario.ruler.end)
+
+        rdf_path = os.path.join(self._storage.base_path, self._controller.scenario.id, "rdf")
+        os.makedirs(rdf_path, exist_ok=True)
+        logger.info("Created rdf folder %s for scenario", rdf_path)
+
+        rdf_source = os.path.normpath(os.path.join(self._storage.base_path, "../rdf"))
+
+        log_paths = (os.path.split(path) for path in glob.glob(rdf_source + "/**/brain_log_*.trig", recursive=True))
+        log_paths = list((path, filename) for path, filename in log_paths
+                    if filename >= "brain_log_" + start_date and filename <= "brain_log_" + stop_date)
+
+        for path, filename in log_paths:
+            shutil.copy(os.path.join(path, filename), os.path.join(rdf_path, filename))
+
+        logger.info("Copied rdf logs to scenario %s", self._controller.id)
+        logger.debug("Copied rdf logs %s to scenario %s", log_paths, rdf_path)
+
+    def _to_datetime(self, ms):
+        return datetime.fromtimestamp(ms / 1000.0).strftime('%Y-%m-%d-%H-%M-%S')
 
     def add_signal(self, signal: Signal):
         try:
