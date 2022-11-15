@@ -1,4 +1,5 @@
 import logging
+import time
 from typing import List
 
 from cltl.combot.event.emissor import ScenarioStarted, ScenarioStopped, ScenarioEvent
@@ -17,13 +18,20 @@ class EmissorDataService:
     @classmethod
     def from_config(cls, storage: EmissorDataStorage, event_bus: EventBus, resource_manager: ResourceManager,
                     config_manager: ConfigurationManager):
+        config = config_manager.get_config("cltl.emissor-data")
+        flush_interval = config.get_int("flush_interval") if "flush_interval" in config else -1
+
         config = config_manager.get_config("cltl.emissor-data.event")
+        event_topics = config.get("topics", multi=True)
 
-        return cls(config.get("topics", multi=True), storage, event_bus, resource_manager)
+        return cls(event_topics, flush_interval, storage,
+                   event_bus, resource_manager)
 
-    def __init__(self, input_topics: List[str], storage: EmissorDataStorage,
+    def __init__(self, input_topics: List[str], flush_interval: int, storage: EmissorDataStorage,
                  event_bus: EventBus, resource_manager: ResourceManager):
         self._storage = storage
+        self._flush_interval = flush_interval
+        self._last_flush = time.time()
 
         self._event_bus = event_bus
         self._resource_manager = resource_manager
@@ -38,6 +46,7 @@ class EmissorDataService:
                                          buffer_size=2048, rejection_strategy=RejectionStrategy.EXCEPTION,
                                          resource_manager=self._resource_manager,
                                          processor=self._process,
+                                         scheduled=self._flush_interval if self._flush_interval > 0 else None,
                                          name=self.__class__.__name__)
         self._topic_worker.start().wait()
 
@@ -81,7 +90,10 @@ class EmissorDataService:
         return self._app
 
     def _process(self, event: Event):
-        if event.payload.type == ScenarioStarted.__name__:
+        if not event:
+            # Scheduled invocation
+            pass
+        elif event.payload.type == ScenarioStarted.__name__:
             self._storage.start_scenario(event.payload.scenario)
             logger.debug("Received scenario started event for scenario %s", event.payload.scenario.id)
         elif event.payload.type == ScenarioStopped.__name__:
@@ -96,3 +108,10 @@ class EmissorDataService:
         elif hasattr(event.payload, 'mentions'):
             self._storage.add_mentions(event.payload.mentions)
             logger.debug("Received mentions event %s on topic %s", event.payload.type, event.metadata.topic)
+
+        if (self._flush_interval > -1
+                and (not event
+                     or self._flush_interval == 0
+                     or (time.time() - self._last_flush) > self._flush_interval)):
+            self._storage.flush()
+            self._last_flush = time.time()

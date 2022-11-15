@@ -31,3 +31,6 @@ class EmissorDataStorage(abc.ABC):
 
     def get_current_scenario_id(self) -> str:
         raise NotImplementedError()
+
+    def flush(self) -> str:
+        pass

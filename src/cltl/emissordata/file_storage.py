@@ -1,5 +1,6 @@
 import logging
 import os
+from concurrent.futures import ThreadPoolExecutor, wait
 from typing import Iterable, Callable
 
 import cv2
@@ -43,12 +44,16 @@ class EmissorDataFileStorage(EmissorDataStorage):
         self._signals = dict()
         self._signal_idx = dict()
 
+        self._is_modified = False
+
     def start_scenario(self, scenario: Scenario):
         if self._controller is not None:
             raise ValueError(f"Scenarion {self._controller.scenario.id} is already started, tried to start {scenario.id}")
 
         self._controller = self._storage.create_scenario(scenario.id, scenario.start,
                                                          scenario.end, scenario.context, scenario.signals)
+        self._is_modified = True
+        self.flush()
 
     def update_scenario(self, scenario: Scenario):
         if (not self._controller) or (self._controller.scenario.id != scenario.id):
@@ -56,8 +61,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
                              f"{self._controller.scenario.id if self._controller else None}")
 
         self._controller.scenario.context = scenario.context
-
-        self._storage.save_scenario(self._controller)
+        self._is_modified = True
 
     def stop_scenario(self, scenario: Scenario):
         if (not self._controller) or (self._controller.scenario.id != scenario.id):
@@ -65,7 +69,8 @@ class EmissorDataFileStorage(EmissorDataStorage):
                              f"{self._controller.scenario.id if self._controller else None}")
 
         self._controller.scenario.ruler.end = scenario.end
-        self._storage.save_scenario(self._controller)
+        self._is_modified = True
+        self.flush()
 
         self._controller = None
         self._signals = dict()
@@ -84,15 +89,17 @@ class EmissorDataFileStorage(EmissorDataStorage):
         if self._controller.scenario.id != signal.time.container_id:
             raise ValueError(f"Scenario {signal.ruler.container_id} is not the current scenario ({self._controller.scenario.id if self._controller else None}) for signal {signal}")
 
+        stored_files = None
         if signal.time.end:
             if signal.modality == Modality.TEXT:
-                pass
+                stored_files = []
             elif signal.modality == Modality.AUDIO:
-                self._store_audio_files(signal)
+                stored_files = self._store_audio_files(signal)
             elif signal.modality == Modality.IMAGE:
-                self._store_image_files(signal)
+                stored_files = self._store_image_files(signal)
             else:
                 logger.error("Skip signal %s with Unsupported modality %s", signal.id, signal.modality)
+        signal.files = stored_files
 
         if signal.id in self._signals:
             self._update(self._signals[signal.id], signal)
@@ -101,16 +108,20 @@ class EmissorDataFileStorage(EmissorDataStorage):
             self._signals[signal.id] = signal
             logger.debug("Added signal id to emissor file storage: %s", signal.id)
 
-        self._storage.save_scenario(self._controller)
+        self._is_modified = True
 
     def _store_audio_files(self, audio_signal: AudioSignal):
+        stored = []
         for url in audio_signal.files:
-            dest_path = self._destination_path(url, "wav")
+            dest_path, relative_path = self._destination_path(url, "wav")
             try:
                 self._store_audio(url, dest_path, audio_signal.ruler)
                 logger.info("Copy signal data from %s to %s", url, dest_path)
             except:
                 logger.exception("Failed to store %s for audio signal %s", audio_signal.id, url)
+            stored.append(relative_path)
+
+        return stored
 
     def _store_audio(self, url: str, destination: str, segment: MultiIndex):
         start, end = segment.bounds[0], segment.bounds[2]
@@ -123,13 +134,17 @@ class EmissorDataFileStorage(EmissorDataStorage):
         sf.write(str(destination), audio, source.rate)
 
     def _store_image_files(self, image_signal: ImageSignal):
+        stored = []
         for url in image_signal.files:
-            dest_path = self._destination_path(url, "png")
+            dest_path, relative_path = self._destination_path(url, "png")
             try:
                 self._store_image(url, dest_path)
                 logger.info("Copy signal data from %s to %s", url, dest_path)
             except:
                 logger.exception("Failed to store %s for audio signal %s", image_signal.id, url)
+            stored.append(relative_path)
+
+        return stored
 
     def _store_image(self, url: str, destination: str):
         with self._image_loader(url) as source:
@@ -138,12 +153,12 @@ class EmissorDataFileStorage(EmissorDataStorage):
         cv2.imwrite(destination, cv2.cvtColor(image.image, cv2.COLOR_RGB2BGR))
 
     def _destination_path(self, url, postfix):
-        file_name = f"{url.replace('cltl-storage:', '')}.{postfix}"
-        dest_path = os.path.join(self._storage.base_path, self._controller.scenario.id, file_name)
+        relative_path = f"{url.replace('cltl-storage:', '')}.{postfix}"
+        dest_path = os.path.join(self._storage.base_path, self._controller.scenario.id, relative_path)
 
         os.makedirs(os.path.dirname(dest_path), exist_ok=True)
 
-        return os.path.normpath(dest_path)
+        return os.path.normpath(dest_path), relative_path
 
     def add_mention(self, mention: Mention):
         if not self._controller:
@@ -151,7 +166,6 @@ class EmissorDataFileStorage(EmissorDataStorage):
             return
 
         self._add_mention(mention)
-        self._storage.save_scenario(self._controller)
 
     def add_mentions(self, mentions: Iterable[Mention]):
         if not self._controller:
@@ -160,8 +174,6 @@ class EmissorDataFileStorage(EmissorDataStorage):
 
         for mention in mentions:
             self._add_mention(mention)
-
-        self._storage.save_scenario(self._controller)
 
     def _add_mention(self, mention: Mention):
         container_id = mention.segment[0].container_id
@@ -184,6 +196,8 @@ class EmissorDataFileStorage(EmissorDataStorage):
                 self._signal_idx[annotation.value.id] = signal_id
                 logger.debug("Added container id to emissor file storage: %s", annotation.value.id)
 
+        self._is_modified = True
+
     def _update(self, obj, update_obj):
         for key, value in vars(update_obj).items():
             if hasattr(obj, key) and value:
@@ -203,3 +217,9 @@ class EmissorDataFileStorage(EmissorDataStorage):
             signal = self._signals[signal_id]
 
         return signal.time.container_id
+
+    def flush(self):
+        if self._controller and self._is_modified:
+            self._storage.save_scenario(self._controller)
+            self._is_modified = False
+            logger.info("Persisted data for scenario %s", self._controller.id)
