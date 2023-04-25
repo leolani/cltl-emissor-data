@@ -78,7 +78,8 @@ class EmissorDataService:
         @self._app.route(f"/scenario/current/id", methods=['GET'])
         def get_current_scenario():
             scenario_id = self._storage.get_current_scenario_id()
-            return scenario_id, 200 if scenario_id else "", 404
+
+            return (scenario_id, 200) if scenario_id else ("", 404)
 
         @self._app.after_request
         def set_cache_control(response):
