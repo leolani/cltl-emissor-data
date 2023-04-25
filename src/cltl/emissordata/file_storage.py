@@ -209,7 +209,8 @@ class EmissorDataFileStorage(EmissorDataStorage):
         elif container_id in self._signal_idx:
             signal_id = self._signal_idx[container_id]
         else:
-            raise ValueError(f"Container {container_id} not found for scenario {self._controller.scenario.id if self._controller else None}")
+            raise ValueError(
+                f"Container {container_id} not found for scenario {self._controller.scenario.id if self._controller else None} and mention {mention.id}")
 
         self._signals[signal_id].mentions.append(mention)
         self._signal_idx[mention.id] = signal_id
