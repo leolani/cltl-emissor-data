@@ -21,10 +21,9 @@ from cltl.emissordata.api import EmissorDataStorage
 
 logger = logging.getLogger(__name__)
 
-
 class EmissorDataFileStorage(EmissorDataStorage):
     @classmethod
-    def from_config(cls, config_manager: ConfigurationManager):
+    def from_config(cls, config_manager: ConfigurationManager, storage: ScenarioStorage = None):
         config = config_manager.get_config("cltl.emissor-data")
 
         def audio_loader(url, offset, length) -> AudioSource:
@@ -33,12 +32,13 @@ class EmissorDataFileStorage(EmissorDataStorage):
         def image_loader(url) -> ImageSource:
             return ClientImageSource.from_config(config_manager, url)
 
-        return cls(config.get("path"), audio_loader, image_loader)
+        return cls(config.get("path"), audio_loader, image_loader, storage)
 
     def __init__(self, path: str,
                  audio_loader: Callable[[str, int, int], AudioSource],
-                 image_loader: Callable[[str], ImageSource]):
-        self._storage = ScenarioStorage(path)
+                 image_loader: Callable[[str], ImageSource],
+                 storage: ScenarioStorage):
+        self._storage = storage if storage else ScenarioStorage(path)
         self._audio_loader = audio_loader
         self._image_loader = image_loader
 
