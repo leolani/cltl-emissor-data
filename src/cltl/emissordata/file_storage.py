@@ -5,9 +5,7 @@ import shutil
 from datetime import datetime
 from typing import Iterable, Callable, Any
 
-import cv2
 import numpy as np
-import soundfile as sf
 from cltl.combot.infra.config import ConfigurationManager
 from emissor.persistence import ScenarioStorage
 from emissor.representation.container import Container, MultiIndex
@@ -26,6 +24,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
         try:
             from cltl.backend.source.client_source import ClientAudioSource
             from cltl.backend.spi.audio import AudioSource
+            import soundfile as sf
 
             def audio_loader(url, offset, length) -> AudioSource:
                 return ClientAudioSource.from_config(config_manager, url, offset, length)
@@ -36,6 +35,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
         try:
             from cltl.backend.source.client_source import ClientImageSource
             from cltl.backend.spi.image import ImageSource
+            import cv2
 
             def image_loader(url) -> ImageSource:
                 return ClientImageSource.from_config(config_manager, url)
