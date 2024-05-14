@@ -3,14 +3,11 @@ import logging
 import os
 import shutil
 from datetime import datetime
-from typing import Iterable, Callable
+from typing import Iterable, Callable, Any
 
 import cv2
 import numpy as np
 import soundfile as sf
-from cltl.backend.source.client_source import ClientAudioSource, ClientImageSource
-from cltl.backend.spi.audio import AudioSource
-from cltl.backend.spi.image import ImageSource
 from cltl.combot.infra.config import ConfigurationManager
 from emissor.persistence import ScenarioStorage
 from emissor.representation.container import Container, MultiIndex
@@ -26,17 +23,31 @@ class EmissorDataFileStorage(EmissorDataStorage):
     def from_config(cls, config_manager: ConfigurationManager, storage: ScenarioStorage = None):
         config = config_manager.get_config("cltl.emissor-data")
 
-        def audio_loader(url, offset, length) -> AudioSource:
-            return ClientAudioSource.from_config(config_manager, url, offset, length)
+        try:
+            from cltl.backend.source.client_source import ClientAudioSource
+            from cltl.backend.spi.audio import AudioSource
 
-        def image_loader(url) -> ImageSource:
-            return ClientImageSource.from_config(config_manager, url)
+            def audio_loader(url, offset, length) -> AudioSource:
+                return ClientAudioSource.from_config(config_manager, url, offset, length)
+        except ImportError as e:
+            audio_loader = None
+            logger.exception("Could not create Audio Source", e)
+
+        try:
+            from cltl.backend.source.client_source import ClientImageSource
+            from cltl.backend.spi.image import ImageSource
+
+            def image_loader(url) -> ImageSource:
+                return ClientImageSource.from_config(config_manager, url)
+        except ImportError as e:
+            image_loader = None
+            logger.exception("Could not create Image Source", e)
 
         return cls(config.get("path"), audio_loader, image_loader, storage)
 
     def __init__(self, path: str,
-                 audio_loader: Callable[[str, int, int], AudioSource],
-                 image_loader: Callable[[str], ImageSource],
+                 audio_loader: Callable[[str, int, int], Any],
+                 image_loader: Callable[[str], Any],
                  storage: ScenarioStorage):
         self._storage = storage if storage else ScenarioStorage(path)
         self._audio_loader = audio_loader
