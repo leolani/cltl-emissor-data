@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Iterable, Callable, Any
 
 import numpy as np
+
 from cltl.combot.infra.config import ConfigurationManager
 from emissor.persistence import ScenarioStorage
 from emissor.representation.container import Container, MultiIndex
@@ -15,6 +16,17 @@ from emissor.representation.util import marshal, unmarshal
 from cltl.emissordata.api import EmissorDataStorage
 
 logger = logging.getLogger(__name__)
+
+try:
+    import soundfile as sf
+except ImportError as e:
+        logger.warning("Import failed", e)
+
+try:
+    import cv2
+except ImportError as e:
+    logger.warning("Import failed", e)
+
 
 class EmissorDataFileStorage(EmissorDataStorage):
     @classmethod
