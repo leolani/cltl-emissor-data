@@ -20,12 +20,12 @@ logger = logging.getLogger(__name__)
 try:
     import soundfile as sf
 except ImportError as e:
-        logger.warning("Import failed", e)
+        logger.warning("Import failed: %s", e)
 
 try:
     import cv2
 except ImportError as e:
-    logger.warning("Import failed", e)
+    logger.warning("Import failed: %s", e)
 
 
 class EmissorDataFileStorage(EmissorDataStorage):
@@ -42,7 +42,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
                 return ClientAudioSource.from_config(config_manager, url, offset, length)
         except ImportError as e:
             audio_loader = None
-            logger.exception("Could not create Audio Source", e)
+            logger.warning("Could not create Audio Source: %s", e)
 
         try:
             from cltl.backend.source.client_source import ClientImageSource
@@ -53,7 +53,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
                 return ClientImageSource.from_config(config_manager, url)
         except ImportError as e:
             image_loader = None
-            logger.exception("Could not create Image Source", e)
+            logger.warning("Could not create Image Source: %s", e)
 
         return cls(config.get("path"), audio_loader, image_loader, storage)
 
