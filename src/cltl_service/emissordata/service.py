@@ -73,13 +73,7 @@ class EmissorDataService:
             try:
                 return self._storage.get_scenario_for_id(element_id), 200
             except KeyError:
-                return self._storage.get_current_scenario_id(), 404
-
-        @self._app.route(f"/scenario/current/id", methods=['GET'])
-        def get_current_scenario():
-            scenario_id = self._storage.get_current_scenario_id()
-
-            return (scenario_id, 200) if scenario_id else ("", 404)
+                return "", 404
 
         @self._app.after_request
         def set_cache_control(response):

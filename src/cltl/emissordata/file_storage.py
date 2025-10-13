@@ -257,9 +257,6 @@ class EmissorDataFileStorage(EmissorDataStorage):
     def get_signal(self, signal_id: str) -> Signal:
         return self._signals[signal_id]
 
-    def get_current_scenario_id(self) -> str:
-        return self._controller.scenario.id if self._controller else None
-
     def get_scenario_for_id(self, element_id: str) -> str:
         if element_id in self._signals:
             signal = self._signals[element_id]
