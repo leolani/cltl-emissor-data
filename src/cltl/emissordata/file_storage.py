@@ -150,11 +150,11 @@ class EmissorDataFileStorage(EmissorDataStorage):
 
         stored_files = None
         if signal.time.end:
-            if signal.modality == Modality.TEXT:
+            if Modality.TEXT.matches(signal.modality):
                 stored_files = []
-            elif signal.modality == Modality.AUDIO:
+            elif Modality.AUDIO.matches(signal.modality):
                 stored_files = self._store_audio_files(signal, scenario_id)
-            elif signal.modality == Modality.IMAGE:
+            elif Modality.IMAGE.matches(signal.modality):
                 stored_files = self._store_image_files(signal, scenario_id)
             else:
                 logger.error("Skip signal %s with Unsupported modality %s", signal.id, signal.modality)
