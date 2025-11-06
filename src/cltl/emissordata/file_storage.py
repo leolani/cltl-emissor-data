@@ -19,12 +19,12 @@ logger = logging.getLogger(__name__)
 
 try:
     import soundfile as sf
-except ImportError as e:
+except ImportError or OSError as e:
         logger.warning("Import failed: %s", e)
 
 try:
     import cv2
-except ImportError as e:
+except ImportError or OSError as e:
     logger.warning("Import failed: %s", e)
 
 
