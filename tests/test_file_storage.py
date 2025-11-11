@@ -26,7 +26,13 @@ class Face:
 class TestEmissorDataFileStorage(unittest.TestCase):
     def setUp(self) -> None:
         self.path = TemporaryDirectory(prefix=self.__class__.__name__)
-        self.emissor_storage = EmissorDataFileStorage(self.path.name)
+        scenario_storage = ScenarioStorage(self.path.name)
+        self.emissor_storage = EmissorDataFileStorage(
+            self.path.name,
+            audio_loader=None,
+            image_loader=None,
+            storage=scenario_storage
+        )
 
     def tearDown(self) -> None:
         self.path.cleanup()
@@ -64,6 +70,7 @@ class TestEmissorDataFileStorage(unittest.TestCase):
 
         audio_signal = AudioSignal.for_scenario("sc_1", 0, None, "", -1, 2)
         self.emissor_storage.add_signal(audio_signal)
+        self.emissor_storage.flush()
 
         actual = ScenarioStorage(self.path.name).load_scenario("sc_1")
         self.assertEqual(scenario, actual.scenario)
@@ -83,6 +90,7 @@ class TestEmissorDataFileStorage(unittest.TestCase):
 
         stop_signal = AudioSignal.for_scenario("sc_1", 0, 1, "", 1, 2, signal_id = start_signal.id)
         self.emissor_storage.add_signal(stop_signal)
+        self.emissor_storage.flush()
 
         actual = ScenarioStorage(self.path.name).load_scenario("sc_1")
         self.assertEqual(scenario, actual.scenario)
@@ -107,6 +115,7 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         self.emissor_storage.add_signal(audio_signal_2)
         stop_signal = AudioSignal.for_scenario("sc_1", 0, 1, "", 1, 2, signal_id=audio_signal_2.id)
         self.emissor_storage.add_signal(stop_signal)
+        self.emissor_storage.flush()
 
         actual_signals = ScenarioStorage(self.path.name).load_modality("sc_1", Modality.AUDIO)
         self.assertEqual(2, len(actual_signals))
@@ -124,6 +133,7 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         mention = Mention("men_1", [audio_signal_1.ruler.get_area_bounding_box(0, 0, 1, 1)],
                           [Annotation("test_annotation", "annotation", 1.0, 0)])
         self.emissor_storage.add_mention(mention)
+        self.emissor_storage.flush()
 
         actual_signals = ScenarioStorage(self.path.name).load_modality("sc_1", Modality.AUDIO)
         self.assertEqual(1, len(actual_signals))
@@ -144,6 +154,7 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         test_annotation = Annotation("test_annotation", "annotation", 1.0, 0)
         mention = Mention("men_2", [token_annotation.ruler], [test_annotation])
         self.emissor_storage.add_mention(mention)
+        self.emissor_storage.flush()
 
         actual_signals = ScenarioStorage(self.path.name).load_modality("sc_1", Modality.AUDIO)
         self.assertEqual(1, len(actual_signals))
@@ -162,6 +173,7 @@ class TestEmissorDataFileStorage(unittest.TestCase):
         mention = Mention("men_1", [image_signal.ruler.get_area_bounding_box(0, 0, 1, 1)],
                           [Annotation("test_annotation", Face(array), 1.0, 0)])
         self.emissor_storage.add_mention(mention)
+        self.emissor_storage.flush()
 
         actual_signals = ScenarioStorage(self.path.name).load_modality("sc_1", Modality.IMAGE)
         self.assertEqual(1, len(actual_signals))
