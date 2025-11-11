@@ -92,10 +92,15 @@ class EmissorDataService:
         def get_scenario(scenario_id: str):
             try:
                 self._validate_scenario_id(scenario_id)
+            except ValueError as e:
+                logger.error("Invalid request for scenario %s: %s", scenario_id, e)
+                return jsonify({"error": str(e)}), 400
+
+            try:
                 scenario_data = self._get_scenario(scenario_id)
                 return jsonify(scenario_data), 200
             except ValueError as e:
-                logger.error("Invalid request for scenario %s: %s", scenario_id, e)
+                logger.error("Scenario not found %s: %s", scenario_id, e)
                 return jsonify({"error": "Scenario not found"}), 404
             except Exception as e:
                 logger.exception("Error getting scenario %s", scenario_id)
@@ -105,6 +110,11 @@ class EmissorDataService:
         def download_scenario(scenario_id: str):
             try:
                 self._validate_scenario_id(scenario_id)
+            except ValueError as e:
+                logger.error("Invalid request for scenario download %s: %s", scenario_id, e)
+                return jsonify({"error": str(e)}), 400
+
+            try:
                 zip_buffer = self._create_scenario_zip(scenario_id)
                 return send_file(
                     zip_buffer,
@@ -113,7 +123,7 @@ class EmissorDataService:
                     attachment_filename=f'{scenario_id}.zip'
                 ), 200
             except ValueError as e:
-                logger.error("Invalid request for scenario download %s: %s", scenario_id, e)
+                logger.error("Scenario not found for download %s: %s", scenario_id, e)
                 return jsonify({"error": "Scenario not found"}), 404
             except Exception as e:
                 logger.exception("Error creating scenario zip for %s", scenario_id)

@@ -153,7 +153,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
             logger.warning(f"Skipping signal for stopped or unknown Scenario {scenario_id}")
             return
 
-        stored_files = None
+        stored_files = []
         if signal.time.end:
             if Modality.TEXT.matches(signal.modality):
                 stored_files = []
