@@ -1,7 +1,9 @@
 import glob
+import io
 import logging
 import os
 import shutil
+import zipfile
 from datetime import datetime
 from typing import Iterable, Callable, Any
 
@@ -16,6 +18,9 @@ from emissor.representation.util import marshal, unmarshal
 from cltl.emissordata.api import EmissorDataStorage
 
 logger = logging.getLogger(__name__)
+
+# Default max zip size in MB - can be overridden via configuration
+DEFAULT_MAX_ZIP_SIZE_MB = 500
 
 try:
     import soundfile as sf
@@ -293,3 +298,84 @@ class EmissorDataFileStorage(EmissorDataStorage):
             self._storage.save_scenario(self._controllers[scenario_id])
             self._is_modified[scenario_id] = False
             logger.info("Persisted data for scenario %s", scenario_id)
+
+    def get_storage_path(self):
+        return self._storage.base_path
+
+    def list_scenarios(self):
+        scenario_ids = self._storage.list_scenarios()
+        scenarios = []
+
+        for scenario_id in scenario_ids:
+            try:
+                controller = self._storage.load_scenario(scenario_id)
+                if controller:
+                    scenario = controller.scenario
+                    scenarios.append({
+                        "id": scenario.id,
+                        "start": scenario.start,
+                        "end": scenario.end,
+                        "context": marshal(scenario.context)
+                    })
+            except Exception as e:
+                logger.warning("Failed to load scenario %s: %s", scenario_id, e)
+
+        return scenarios
+
+    def get_scenario(self, scenario_id: str):
+        controller = self._storage.load_scenario(scenario_id)
+
+        if not controller:
+            raise ValueError(f"Scenario {scenario_id} not found")
+
+        try:
+            controller.load_signals((Modality.TEXT, Modality.AUDIO, Modality.IMAGE))
+        except Exception as e:
+            logger.warning("Failed to load some signals for scenario %s: %s", scenario_id, e)
+
+        scenario_data = {
+            "scenario": marshal(controller.scenario),
+            "signals": {}
+        }
+
+        for modality, signals in controller.signals.items():
+            scenario_data["signals"][modality.name.lower()] = [marshal(signal) for signal in signals]
+
+        return scenario_data
+
+    def create_scenario_zip(self, scenario_id: str):
+        base_path_normalized = os.path.normpath(self._storage.base_path)
+        scenario_path = os.path.normpath(os.path.join(base_path_normalized, scenario_id))
+
+        if not scenario_path.startswith(base_path_normalized + os.sep):
+            raise ValueError("Invalid scenario path: path traversal detected")
+
+        if not os.path.exists(scenario_path):
+            raise ValueError(f"Scenario {scenario_id} not found")
+
+        if not os.path.isdir(scenario_path):
+            raise ValueError(f"Scenario {scenario_id} is not a directory")
+
+        total_size = sum(
+            os.path.getsize(os.path.join(root, file))
+            for root, dirs, files in os.walk(scenario_path)
+            for file in files
+        )
+
+        if total_size > DEFAULT_MAX_ZIP_SIZE_MB * 1024 * 1024:
+            raise ValueError(
+                f"Scenario too large to download: {total_size / (1024 * 1024):.1f}MB "
+                f"(max: {DEFAULT_MAX_ZIP_SIZE_MB}MB)"
+            )
+
+        zip_buffer = io.BytesIO()
+
+        with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+            for root, dirs, files in os.walk(scenario_path):
+                for file in files:
+                    file_path = os.path.join(root, file)
+                    arcname = os.path.relpath(file_path, self._storage.base_path)
+                    zip_file.write(file_path, arcname)
+
+        zip_buffer.seek(0)
+        return zip_buffer
