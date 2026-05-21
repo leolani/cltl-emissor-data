@@ -19,6 +19,10 @@ from cltl.emissordata.api import EmissorDataStorage
 
 logger = logging.getLogger(__name__)
 
+
+def _get_attr(obj, key):
+    return getattr(obj, key) if hasattr(obj, key) else obj[key]
+
 # Default max zip size in MB - can be overridden via configuration
 DEFAULT_MAX_ZIP_SIZE_MB = 500
 
@@ -166,12 +170,17 @@ class EmissorDataFileStorage(EmissorDataStorage):
         signal.files = stored_files
 
         signals = self._signals[scenario_id]
-        if signal.id in signals:
-            self._update(signals[signal.id], signal)
-        else:
-            self._controllers[scenario_id].append_signal(signal)
-            signals[signal.id] = signal
-            logger.debug("Added signal id to emissor file storage for scenario %s: %s", scenario_id, signal.id)
+        try:
+            if signal.id in signals:
+                self._update(signals[signal.id], signal)
+            else:
+                self._controllers[scenario_id].append_signal(signal)
+                signals[signal.id] = signal
+                logger.debug("Added signal id to emissor file storage for scenario %s: %s", scenario_id, signal.id)
+        except Exception:
+            logger.warning("Could not store signal %s for scenario %s, skipping",
+                           getattr(signal, 'id', signal), scenario_id)
+            return
 
         self._is_modified[scenario_id] = True
 
@@ -233,7 +242,7 @@ class EmissorDataFileStorage(EmissorDataStorage):
             self._add_mention(mention)
 
     def _add_mention(self, mention: Mention):
-        container_id = mention.segment[0].container_id
+        container_id = _get_attr(mention.segment[0] if hasattr(mention, 'segment') else mention['segment'][0], 'container_id')
 
         # Find the scenario that contains this signal
         scenario_id = None
@@ -247,19 +256,21 @@ class EmissorDataFileStorage(EmissorDataStorage):
                 signal_id = self._signal_idx[sid][container_id]
                 break
 
+        mention_id = _get_attr(mention, 'id')
         if not scenario_id:
-            logger.warning(f"Container {container_id} not found in any active scenario for mention {mention.id}")
+            logger.warning(f"Container {container_id} not found in any active scenario for mention {mention_id}")
             return
 
         self._signals[scenario_id][signal_id].mentions.append(mention)
-        self._signal_idx[scenario_id][mention.id] = signal_id
-        logger.debug("Added mention id to emissor file storage for scenario %s: %s", scenario_id, mention.id)
+        self._signal_idx[scenario_id][mention_id] = signal_id
+        logger.debug("Added mention id to emissor file storage for scenario %s: %s", scenario_id, mention_id)
 
-        for annotation in mention.annotations:
+        annotations = mention.annotations if hasattr(mention, 'annotations') else mention.get('annotations', [])
+        for annotation in annotations:
             if isinstance(annotation, Container):
                 self._signal_idx[scenario_id][annotation.id] = signal_id
                 logger.debug("Added annotation id to emissor file storage for scenario %s: %s", scenario_id, annotation.id)
-            elif isinstance(annotation.value, Container):
+            elif hasattr(annotation, 'value') and isinstance(annotation.value, Container):
                 self._signal_idx[scenario_id][annotation.value.id] = signal_id
                 logger.debug("Added container id to emissor file storage for scenario %s: %s", scenario_id, annotation.value.id)
 
