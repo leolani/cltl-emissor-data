@@ -27,7 +27,8 @@ setup(
         "impl": [
             "emissor",
             "soundfile",
-            "opencv-python"
+            "opencv-python",
+            "cltl-backend"
         ],
         "service": [
             "flask"
